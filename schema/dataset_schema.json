@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EHR security comparative-study dataset",
+  "description": "Frozen schema for Paper #1. Paper #2's healthcare-adjusted index is a function over these tables. Every record carries snapshot_date and a provenance pointer to its data/raw source.",
+  "version": "1.0.0",
+  "conventions": {
+    "snapshot_date": "ISO date; matches config/snapshot.yaml",
+    "provenance": "relative path under data/raw/ to the verbatim source response",
+    "nulls": "use null for unknown/undeterminable values; never impute",
+    "system_type": ["clinical_application", "clinical_data_platform"]
+  },
+  "entities": {
+    "system": {
+      "description": "One row per studied system.",
+      "fields": {
+        "system_id": "string (matches systems.yaml id)",
+        "display_name": "string",
+        "forge": "string (github | codeberg)",
+        "system_type": "enum: clinical_application | clinical_data_platform",
+        "primary_languages": "array<string>",
+        "license": "string",
+        "repo_scope_rule": "string",
+        "core_repos": "array<string>",
+        "cpe_hints": "array<string>",
+        "match_confidence_overall": "enum: high | medium | low",
+        "snapshot_date": "date"
+      }
+    },
+    "practice_scores": {
+      "description": "Construct A. One row per (system, repo, Scorecard check).",
+      "fields": {
+        "system_id": "string",
+        "repo": "string",
+        "check_name": "string (e.g. Code-Review, Branch-Protection, SAST, Signed-Releases)",
+        "score": "number 0-10 | null",
+        "assessable": "boolean (false for GitHub-only checks on Codeberg-hosted GNU Health)",
+        "reason": "string",
+        "scorecard_version": "string",
+        "snapshot_date": "date",
+        "provenance": "string"
+      }
+    },
+    "disclosed_vuln": {
+      "description": "Construct B (landscape). One row per disclosed vulnerability matched to a system. `source` records the disclosure channel: most rows are CVE-ecosystem (nvd), but some systems disclose outside CVE (vendor_SA, release_notes) -- central to the RQ2 disclosure-asymmetry argument.",
+      "fields": {
+        "system_id": "string",
+        "vuln_id": "string (CVE-..., GHSA-..., or a vendor advisory id)",
+        "source": "enum: nvd | osv | ghsa | vendor_SA | release_notes | bug_tracker",
+        "published_date": "date | null",
+        "cvss_version": "string (3.x | 4.0) | null",
+        "cvss_score": "number | null",
+        "severity": "enum: low | medium | high | critical | null",
+        "cwe": "array<string>",
+        "owasp_category": "string | null",
+        "summary": "string | null (one-line description; populated for curated/vendor rows)",
+        "fix_ref": "string | null (commit/release link)",
+        "remediation_days": "integer | null (OPPORTUNISTIC; null if fix not linkable)",
+        "match_confidence": "enum: high | medium | low",
+        "snapshot_date": "date",
+        "provenance": "string"
+      }
+    },
+    "dependency": {
+      "description": "Construct C. One row per (system, dependency, version).",
+      "fields": {
+        "system_id": "string",
+        "package": "string",
+        "ecosystem": "string (maven | npm | pypi | composer | ...)",
+        "version": "string",
+        "is_direct": "boolean",
+        "vuln_ids": "array<string>",
+        "max_severity": "enum: low | medium | high | critical | none",
+        "snapshot_date": "date",
+        "provenance": "string"
+      }
+    },
+    "shared_dependency": {
+      "description": "Construct C centerpiece. One row per dependency shared by >1 system.",
+      "fields": {
+        "package": "string",
+        "ecosystem": "string",
+        "systems": "array<string> (system_ids that depend on it)",
+        "is_vulnerable": "boolean",
+        "max_severity": "enum: low | medium | high | critical | none",
+        "snapshot_date": "date"
+      }
+    },
+    "descriptor": {
+      "description": "Construct D (CONTEXT, not an RQ). One row per system. No inferential use at N=5.",
+      "fields": {
+        "system_id": "string",
+        "loc": "integer | null",
+        "language_mix": "object<string, number>",
+        "repo_count": "integer",
+        "contributors": "integer | null",
+        "commit_cadence": "string | null",
+        "release_frequency": "string | null",
+        "has_security_policy": "boolean",
+        "security_policy_source": "enum: repo_file | external_docs | null (where the coordinated-disclosure policy lives)",
+        "security_policy_ref": "string | null (repo path or external URL of the policy)",
+        "has_bug_bounty": "boolean",
+        "snapshot_date": "date",
+        "provenance": "string"
+      }
+    }
+  }
+}

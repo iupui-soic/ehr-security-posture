@@ -1,0 +1,169 @@
+# =============================================================================
+# systems.yaml — sample definition for the open-source EHR security study
+# =============================================================================
+# This file is AUTHORITATIVE for the sample. The pipeline reads it to know which
+# repos to measure, how to scope multi-repo projects, and how to match CVEs.
+#
+# Fields marked `verify: true` are starting points the agent MUST confirm against
+# the live forge / NVD CPE dictionary before relying on them. Do not invent repo
+# names or CPE strings; verify, then set verify: false and record what you found.
+#
+# system_type:
+#   clinical_application  -> full clinical app with patient-facing UI
+#   clinical_data_platform -> backend / headless data platform (narrower app-layer surface)
+# =============================================================================
+
+meta:
+  study: "Comparative security study of open-source EHR systems (Paper #1)"
+  sample_size: 5
+  framing: "comparative study (N=5), not a large-N benchmark"
+  report_grouped_by: system_type   # app vs platform
+
+systems:
+
+  - id: openmrs
+    display_name: "OpenMRS"
+    included: true
+    forge: github
+    org_url: "https://github.com/openmrs"
+    primary_languages: [Java, TypeScript]
+    system_type: clinical_application
+    license: "MPL-2.0 (with Healthcare Disclaimer)"   # verify: true
+    repo_scope_rule: >
+      Core platform repositories shipped in the OpenMRS reference application /
+      O3 distribution. Multi-repo project: report at this 'core' scope, then run
+      a sensitivity check at a wider ecosystem scope (selected modules).
+    core_repos:           # verify: true — confirm against the current reference distro
+      - openmrs/openmrs-core
+      - openmrs/openmrs-distro-referenceapplication
+      - openmrs/openmrs-esm-core            # O3 frontend
+      - openmrs/openmrs-module-fhir2
+    wider_scope:          # RQ3 supply-chain sensitivity set — decided 2026-06-09
+      # "O3 reference application as shipped": the full dependency surface of the
+      # reference-application docker image. Used ONLY for the RQ3 sensitivity check;
+      # core_repos stays the primary comparable unit. The distro's own assembly
+      # files are the source of truth (avoids duplicating/drifting a package list).
+      source_repo: openmrs/openmrs-distro-referenceapplication
+      frontend_assemble_config: frontend/spa-assemble-config.json   # 45 @openmrs/esm-*-app packages (dist-tag: next)
+      backend_distro_properties: distro/distro.properties           # war.openmrs + ~34 omod.* modules
+      sbom_method: >
+        Syft each shipped artifact's source repo and union the SBOMs into the
+        OpenMRS dependency node set (same tool the core pipeline uses). deps.dev
+        was evaluated first but is NOT viable here: it returns a SELF-only node
+        (no resolved graph) for the @openmrs/esm-*-app npm packages and does not
+        index the org.openmrs.module Maven (O)MODs at all. Frontend packages are
+        mapped to their GitHub repo via the npm registry's repository.url (with an
+        '-app'-suffix fallback for renames); repos are cloned at their default
+        branch, which tracks the same line as the 'next' dist-tag the distro pins.
+      implemented_by: "src/acquire/o3_wide.py (acquire) + src/analyze/o3_sensitivity.py (delta + F6b)"
+    identifiers:
+      cpe_hints: ["cpe:2.3:a:openmrs:openmrs"]   # verify: true
+      ghsa_search_terms: ["openmrs"]
+    notes: "Largest/most heterogeneous codebase; the multi-repo scope decision matters most here."
+
+  - id: openemr
+    display_name: "OpenEMR"
+    included: true
+    forge: github
+    org_url: "https://github.com/openemr"
+    primary_languages: [PHP]
+    system_type: clinical_application
+    license: "GPL-3.0-or-later"   # verify: true
+    repo_scope_rule: "Single primary monorepo."
+    core_repos:
+      - openemr/openemr
+    identifiers:
+      cpe_hints: ["cpe:2.3:a:open-emr:openemr", "cpe:2.3:a:openemr:openemr"]   # verify: true
+      ghsa_search_terms: ["openemr"]
+    notes: "Expected to have the LARGEST disclosed-CVE history of the set; anchors the RQ2 asymmetry."
+
+  - id: gnuhealth
+    display_name: "GNU Health"
+    included: true
+    forge: codeberg          # NOT GitHub — routes metadata to the Gitea API
+    org_url: "https://codeberg.org/gnuhealth"
+    primary_languages: [Python]   # Tryton framework
+    system_type: clinical_application
+    license: "GPL-3.0-or-later"
+    repo_scope_rule: >
+      Core platform components on Codeberg: the HMIS/Tryton server (his), the
+      federation+auth server (thalamus), and the patient app (mygnuhealth).
+      Wider-scope sensitivity set adds his-client and his-utils.
+    core_repos:              # verified 2026-06-09 by enumerating codeberg.org/gnuhealth
+      - "codeberg.org/gnuhealth/his"          # HMIS server (Tryton modules) — the core
+      - "codeberg.org/gnuhealth/thalamus"     # federation / authentication server (Flask)
+      - "codeberg.org/gnuhealth/mygnuhealth"  # MyGNUHealth patient app (Kivy)
+    identifiers:
+      cpe_hints: ["cpe:2.3:a:gnu:health", "cpe:2.3:a:gnusolidario:gnu_health"]   # verify: true
+      ghsa_search_terms: ["gnu health", "gnuhealth"]
+    # GNU Health's coordinated-disclosure policy is published in its docs, not as a
+    # repo SECURITY.md, so the contents probe can't see it -> declare it here
+    # (verified 2026-06-09). Honoured by build_dataset as an external policy.
+    security_policy_url: "https://docs.gnuhealth.org/his/techguide/security.html"
+    security_contact: "security@gnuhealth.org"
+    tooling_caveats:
+      - "Off GitHub: OpenSSF Scorecard GitHub-only checks are NOT assessable -> mark not_assessable, do not impute."
+      - "No GitHub dependency-graph SBOM -> use Syft for the SBOM."
+    notes: "Actively maintained (5.x, late 2025). Verify whether a GitHub mirror exists; Codeberg is canonical."
+
+  - id: ehrbase
+    display_name: "EHRbase"
+    included: true
+    forge: github
+    org_url: "https://github.com/ehrbase"
+    primary_languages: [Java]
+    system_type: clinical_data_platform     # openEHR clinical data repository (backend)
+    license: "Apache-2.0"   # verify: true
+    repo_scope_rule: "Core clinical data repository server."
+    core_repos:
+      - ehrbase/ehrbase
+    identifiers:
+      cpe_hints: ["cpe:2.3:a:ehrbase:ehrbase"]   # verify: true — may have few/no CVEs
+      ghsa_search_terms: ["ehrbase"]
+    comparability_caveats:
+      - "Backend CDR, no patient-facing UI -> app-layer vuln classes (XSS/CSRF) not comparable to clinical apps."
+    notes: "openEHR CDR. Report under clinical_data_platform group."
+
+  - id: medplum
+    display_name: "Medplum"
+    included: true
+    forge: github
+    org_url: "https://github.com/medplum"
+    primary_languages: [TypeScript]
+    system_type: clinical_data_platform     # FHIR-native headless platform + admin UI
+    license: "Apache-2.0"
+    repo_scope_rule: "Primary monorepo (packages within)."
+    core_repos:
+      - medplum/medplum
+    identifiers:
+      cpe_hints: ["cpe:2.3:a:medplum:medplum"]   # verify: true — likely few CVEs
+      ghsa_search_terms: ["medplum"]
+    comparability_caveats:
+      - "Headless FHIR platform + admin UI; partial UI surface. Report under clinical_data_platform group."
+    notes: "Apache-2.0, FHIR-native, actively maintained, OWASP-aligned, externally pen-tested per vendor."
+
+# =============================================================================
+# Excluded systems — kept for the supplementary exclusion table
+# =============================================================================
+excluded:
+  - id: bahmni
+    reason: "Team decision; OpenMRS-derived distribution -> double-count risk in the dependency graph."
+  - id: librehealth_ehr
+    reason: "Team decision."
+  - id: openelis_global
+    reason: "Team decision; laboratory information system, not a patient-record EHR."
+  - id: worldvista_osehra
+    reason: "Team decision; MUMPS outlier that breaks language-comparable tooling."
+  - id: hospitalrun
+    reason: "GitHub org archived Oct 2025, project closed -> fails active-maintenance criterion."
+  - id: ottehr
+    reason: "Service-oriented product with an incomplete openly-available model; not a self-contained OSS codebase."
+
+# =============================================================================
+# Inclusion criteria (apply when reconsidering the sample)
+# =============================================================================
+inclusion_criteria:
+  - "Manages patient clinical records."
+  - "Source on a public forge with API access."
+  - "Actively maintained (release/commit within ~18 months)."
+  - "Non-trivial real-world adoption."

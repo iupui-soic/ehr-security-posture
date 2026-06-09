@@ -1,0 +1,47 @@
+# =============================================================================
+# snapshot.yaml — reproducibility anchor
+# =============================================================================
+# Every number in the paper is reported "as of SNAPSHOT_DATE". The pipeline
+# writes raw responses into data/raw/<source>/<SNAPSHOT_DATE>/ and re-runs are
+# idempotent (skip if the dated raw exists; pass --refresh to force).
+# =============================================================================
+
+snapshot_date: "2026-06-09"   # ISO date; every reported number is "as of" this date
+
+# --- Pin every tool that touches the data ------------------------------------
+# scorecard/syft run via pinned Docker images (no Go toolchain on the host); the
+# exact image digests are recorded by scripts/tool_versions.sh after `make setup`.
+tool_versions:
+  python: "3.11.15"           # isolated project venv (uv-managed CPython 3.11)
+  scorecard: "v5.1.1"         # image gcr.io/openssf/scorecard:stable; digest in tool_versions.lock
+  syft: "1.45.1"              # image anchore/syft:latest; digest in tool_versions.lock
+  # python deps are pinned in pyproject.toml / requirements.lock
+  # exact image digests + full version strings: config/tool_versions.lock
+
+# --- External endpoints (pin where versioned) --------------------------------
+endpoints:
+  github_rest: "https://api.github.com"
+  github_graphql: "https://api.github.com/graphql"
+  codeberg_api: "https://codeberg.org/api/v1"      # GNU Health
+  nvd_cve: "https://services.nvd.nist.gov/rest/json/cves/2.0"
+  osv_querybatch: "https://api.osv.dev/v1/querybatch"
+  deps_dev: "https://api.deps.dev/v3"
+
+# --- Credentials are read from the environment, never committed --------------
+required_env:
+  - GITHUB_TOKEN              # read-only PAT
+  - NVD_API_KEY               # free NVD API key (raises rate limit)
+optional_env:
+  - CODEBERG_TOKEN            # optional, for GNU Health metadata
+
+# --- Polite-client defaults --------------------------------------------------
+http:
+  max_retries: 5
+  backoff_seconds: 2.0
+  cache: true                 # cache raw responses; respect rate limits
+
+notes: >
+  Construct E (latent-vulnerability SAST probe) is OFF by default. If ever enabled,
+  it runs under DISCLOSURE.md (private coordinated disclosure first, aggregate-only
+  reporting) and is recorded here with the SAST tool versions.
+construct_e_enabled: false

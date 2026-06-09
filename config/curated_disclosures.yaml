@@ -1,0 +1,102 @@
+# =============================================================================
+# curated_disclosures.yaml — hand-validated disclosed vulnerabilities that are
+# NOT in NVD/OSV/GHSA (Construct B extension; merged by transform/cve_classify.py).
+# =============================================================================
+# Purpose: answer RQ2's "0 CVEs != unexamined". Some systems disclose security
+# issues through their own vendor channels rather than the CVE ecosystem, so a
+# CVE/NVD query alone undercounts them to zero. Each entry is sourced + dated.
+#
+# Discipline (mirrors the rest of the pipeline):
+#   * severity / cvss_score stay NULL unless the advisory states an official
+#     score -- never imputed.
+#   * `source`: vendor_SA = formal signed Security Advisory; release_notes = a
+#     security fix announced only in release news (lower confidence).
+#   * `provenance_url` is the public source; `match_confidence` reflects how
+#     firmly the disclosure is attributed to the system.
+# These are kept CVE-separate downstream: the CVE figures (F2/F2b/F3) exclude
+# them; T2 reports them under "Other disclosures" and T2b lists them.
+# =============================================================================
+disclosures:
+  - system_id: gnuhealth
+    vuln_id: GNUHEALTH-SA-2016-1
+    source: vendor_SA
+    published_date: "2016-03-22"
+    severity: null            # advisory states no CVSS; a remote unauth. DoS
+    cvss_score: null
+    cvss_version: null
+    cwe: ["CWE-400"]          # uncontrolled resource consumption
+    owasp_category: null      # DoS has no clean OWASP-2021 Top-10 category
+    summary: >-
+      get_login remote denial of service in Tryton: failed-login rows for
+      non-existent accounts are stored and never purged, allowing an attacker to
+      exhaust the database. Affects GNU Health 2.0-3.0 / Trytond 2.8-3.8.
+    fix_ref: "https://ftp.gnu.org/gnu/health/security/GNUHEALTH-SA-2016-1.tryton.patch.asc"
+    match_confidence: high
+    provenance_url: "https://ftp.gnu.org/gnu/health/security/GNUHEALTH-SA-2016-1.tryton.asc"
+
+  - system_id: gnuhealth
+    vuln_id: GNUHEALTH-CC-3.6.4-sec
+    source: release_notes
+    published_date: "2020-06-20"   # confirmed: savannah news, posted by L. Falcon
+    severity: null            # not specified; "minor security issues"
+    cvss_score: null
+    cvss_version: null
+    cwe: []
+    owasp_category: null
+    summary: >-
+      gnuhealth-control (HMIS Control Center) 3.6.4 fixed "minor security issues"
+      found by the openSUSE security team (upstream openSUSE bugzilla #1167128).
+      Disclosed via a release announcement titled "Security:", not a CVE.
+    fix_ref: null
+    match_confidence: high    # maintainer explicitly labelled it a security release
+    provenance_url: "https://savannah.gnu.org/forum/forum.php?forum_id=9758"
+
+  # --- Savannah bug-tracker items tagged Category=Security (the project's own
+  # classification of a security issue). Confirmed 2026-06-09; 4 matching, 2 are
+  # GNU Health software vulns (below), 2 are infra and excluded (see note). ---
+  - system_id: gnuhealth
+    vuln_id: GNUHEALTH-BUG-50904
+    source: bug_tracker
+    published_date: "2017-05-01"   # bug submitted; status Fixed
+    severity: null
+    cvss_score: null
+    cvss_version: null
+    cwe: ["CWE-522"]          # insufficiently protected credentials
+    owasp_category: "A07:2021-Identification and Authentication Failures"
+    summary: >-
+      "print reveals password" — a printed document/report exposed a user
+      password (sensitive-credential disclosure). Project-tagged Security; Fixed.
+    fix_ref: null
+    match_confidence: high
+    provenance_url: "https://savannah.gnu.org/bugs/?50904"
+
+  - system_id: gnuhealth
+    vuln_id: GNUHEALTH-BUG-52020
+    source: bug_tracker
+    published_date: "2017-09-14"   # bug submitted; status Fixed
+    severity: null
+    cvss_score: null
+    cvss_version: null
+    cwe: ["CWE-916"]          # password hash with insufficient computational effort
+    owasp_category: "A02:2021-Cryptographic Failures"
+    summary: >-
+      "Missing bcrypt dependency in gnuhealth-setup" — installer omitted bcrypt, so
+      deployments could fail to hash passwords with the intended algorithm.
+      Project-tagged Security; Fixed.
+    fix_ref: null
+    match_confidence: high
+    provenance_url: "https://savannah.gnu.org/bugs/?52020"
+
+  # EVALUATED AND EXCLUDED — GNU Health HMIS 5.0.7 (2026-04-11): "fixes issues in
+  # the crypto subsystem related to the laboratory results validation process."
+  # On inspection this is NOT a disclosed vulnerability: "crypto subsystem" is the
+  # module name (health_crypto_lab); the actual fix (Codeberg issue #177) is "wrong
+  # display of the validation button and 403 error" — a functional/UI bug, with no
+  # security framing, no advisory, and no CVE.
+  #
+  # EXCLUDED — Security-tagged tracker items #58585 ("ssl-certificate for translation
+  # server", 2020) and #58073 ("enable https on translate.gnusolidario.org",
+  # reassigned to another tracker): these harden GNU Health *project web
+  # infrastructure* (the translation server), not the EHR codebase that handles
+  # patient data — out of scope for the software-security comparison (we don't audit
+  # any system's hosting infra), and #58073 was reassigned away.

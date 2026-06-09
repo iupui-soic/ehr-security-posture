@@ -1,0 +1,44 @@
+# --- secrets (never commit) ---
+.env
+*.pem
+*.key
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- pipeline data ---
+# Raw API responses are archived but large/regenerable; keep them out of git by
+# default. Flip these rules if you decide to version a frozen snapshot for release.
+data/raw/**
+data/interim/**
+data/processed/**
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# scratch repo clones used for SBOM/LOC
+.cache/
+clones/
+
+# scratch pipeline run-logs (regenerable; canonical record is data/raw/<date>/)
+.pipeline.log
+.rq1.log
+.rq2.log
+.setup.log
+
+# manuscript (LaTeX + figures) is tracked separately on Overleaf with coauthors;
+# figures are regenerable via `make figures`. Keep the whole folder out of git.
+paper/
+
+# internal planning document — kept locally, not part of the released repo
+paper1_ehr_security_benchmark_plan.md
+docs/PLAN.md
