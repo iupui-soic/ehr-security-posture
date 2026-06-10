@@ -1,0 +1,19 @@
+<!-- Resolves SpotBugs + FindSecBugs (+ deps) so the CLI can run on compiled
+     bytecode. Used by scripts/rq4_sast_scan.sh via dependency:build-classpath.
+     Pinned versions for reproducibility. -->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>pilot</groupId><artifactId>spotbugs-runner</artifactId><version>1</version>
+  <dependencies>
+    <dependency>
+      <groupId>com.github.spotbugs</groupId>
+      <artifactId>spotbugs</artifactId>
+      <version>4.8.6</version>
+    </dependency>
+    <dependency>
+      <groupId>com.h3xstream.findsecbugs</groupId>
+      <artifactId>findsecbugs-plugin</artifactId>
+      <version>1.13.0</version>
+    </dependency>
+  </dependencies>
+</project>

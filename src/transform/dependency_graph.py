@@ -34,6 +34,13 @@ MANIFEST_FILES = (
     "composer.json", "go.mod", "Gemfile", "Cargo.toml",
 )
 
+# Components whose every recorded location is under a vendored tooling / docs path
+# are NOT part of the running application and must not count toward supply-chain
+# risk. Surfaced by reachability analysis: OpenEMR's apparent Maven deps came
+# entirely from a bundled SchemaSpy schema-diagram jar under Documentation/, never
+# invoked by the PHP app. Patterns are matched against Syft component locations.
+VENDORED_LOCATION_PATTERNS = ("/Documentation/EHI_Export/schemaspy/",)
+
 
 def _purl_type(purl: str) -> str | None:
     if not purl or not purl.startswith("pkg:"):
@@ -56,6 +63,13 @@ def _component_locations(comp: dict) -> list[str]:
     return locs
 
 
+def _is_vendored(comp: dict) -> bool:
+    """True iff every recorded location of the component is under a vendored path."""
+    locs = _component_locations(comp)
+    return bool(locs) and all(
+        any(pat in loc for pat in VENDORED_LOCATION_PATTERNS) for loc in locs)
+
+
 def _direct_map_from_graph(sbom: dict) -> dict[str, bool] | None:
     deps = sbom.get("dependencies", []) or []
     if not deps:
@@ -74,6 +88,7 @@ def _direct_map_from_graph(sbom: dict) -> dict[str, bool] | None:
 def _system_dependencies(system) -> dict[str, dict]:
     """purl(with version) -> dependency record, unioned over the system's repos."""
     out: dict[str, dict] = {}
+    n_vendored = 0
     depvulns = provenance.load_or_none("depvulns", f"{system.id}.json") or {}
     vuln_map = depvulns.get("vuln_map", {})
     vuln_details = depvulns.get("vuln_details", {})
@@ -90,6 +105,9 @@ def _system_dependencies(system) -> dict[str, dict]:
         for comp in sbom.get("components", []) or []:
             purl = comp.get("purl")
             if not purl:
+                continue
+            if _is_vendored(comp):  # bundled tooling/docs, not the running app
+                n_vendored += 1
                 continue
             ref = comp.get("bom-ref", purl)
             if graph_direct is not None:
@@ -120,15 +138,23 @@ def _system_dependencies(system) -> dict[str, dict]:
                 prev = out[purl]
                 rec["is_direct"] = prev["is_direct"] or is_direct
             out[purl] = rec
+    if n_vendored:
+        log.info("%s: excluded %d vendored components (bundled tooling/docs)",
+                 system.id, n_vendored)
     return out
 
 
 def analyze_shared(per_system: dict[str, dict[str, dict]],
-                   system_meta: dict[str, dict] | None = None):
+                   system_meta: dict[str, dict] | None = None,
+                   reachable_fn=None):
     """Pure: from {sid: {purl: dep_rec}} compute (shared_list, bipartite_graph_data).
 
     A dependency is "shared" when its purl_base is used by >1 system. Severity of a
     shared node is the max over the vulnerable instances across systems.
+
+    ``reachable_fn(system_id, package, ecosystem, purl_base) -> bool`` (optional)
+    annotates each vulnerable shared node with the subset of systems that genuinely
+    reach it (``reachable_systems``); without it, all using systems are recorded.
     """
     system_meta = system_meta or {}
     base_to_systems: dict[str, set[str]] = {}
@@ -141,6 +167,19 @@ def analyze_shared(per_system: dict[str, dict[str, dict]],
             base_meta.setdefault(b, {"package": d["package"], "ecosystem": d["ecosystem"]})
             if d["vuln_ids"]:
                 base_severities.setdefault(b, []).append(d["max_severity"])
+
+    # Reachable subset per shared base (computed for vulnerable nodes when a
+    # reachable_fn is supplied; otherwise every using system is "reachable").
+    reach_map: dict[str, list[str]] = {}
+    for b, sids in base_to_systems.items():
+        if len(sids) < 2:
+            continue
+        sids_sorted = sorted(sids)
+        if reachable_fn is not None and base_severities.get(b):
+            reach_map[b] = [s for s in sids_sorted if reachable_fn(
+                s, base_meta[b]["package"], base_meta[b]["ecosystem"], b)]
+        else:
+            reach_map[b] = sids_sorted
 
     shared: list[dict] = []
     for b, sids in base_to_systems.items():
@@ -155,6 +194,8 @@ def analyze_shared(per_system: dict[str, dict[str, dict]],
             "n_systems": len(sids),
             "is_vulnerable": bool(sevs),
             "max_severity": max_bin(sevs) if sevs else "none",
+            "reachable_systems": reach_map[b],
+            "n_reachable": len(reach_map[b]),
             "snapshot_date": config.snapshot_date(),
         })
     shared.sort(key=lambda r: (-r["n_systems"], not r["is_vulnerable"], r["package"]))
@@ -172,7 +213,7 @@ def analyze_shared(per_system: dict[str, dict[str, dict]],
         g.add_node(f"dep:{b}", kind="dependency", label=base_meta[b]["package"],
                    ecosystem=base_meta[b]["ecosystem"],
                    vulnerable=bool(sevs), max_severity=max_bin(sevs) if sevs else "none",
-                   n_systems=len(sids))
+                   n_systems=len(sids), reachable_systems=reach_map[b])
         for sid in sids:
             g.add_edge(f"sys:{sid}", f"dep:{b}")
     graph_data = nx.node_link_data(g, edges="links")
@@ -194,15 +235,26 @@ def build():
 
     system_meta = {s.id: {"system_type": s.system_type, "display_name": s.display_name}
                    for s in systems}
-    shared, graph_data = analyze_shared(per_system, system_meta)
+
+    from . import reachability  # local import: only build() needs the clones
+
+    def _reach(sid, package, ecosystem, base):
+        recs = per_system.get(sid, {})
+        if any(d["is_direct"] for d in recs.values() if d["purl_base"] == base):
+            return True  # directly declared (covers JDBC drivers reached via JDBC)
+        return reachability.source_referenced(sid, package, ecosystem)
+
+    shared, graph_data = analyze_shared(per_system, system_meta, reachable_fn=_reach)
 
     provenance.write_interim_json("dependencies.json", all_deps)
     provenance.write_interim_json("shared_dependencies.json", shared)
     provenance.write_interim_json("dependency_graph.json", graph_data)
 
     n_shared_vuln = sum(1 for s in shared if s["is_vulnerable"])
-    log.info("wrote %d dependency rows; %d shared deps (%d shared & vulnerable)",
-             len(all_deps), len(shared), n_shared_vuln)
+    n_reach_spof = sum(1 for s in shared if s["is_vulnerable"] and s["n_reachable"] >= 2)
+    log.info("wrote %d dependency rows; %d shared deps (%d shared & vulnerable; "
+             "%d reachable cross-system SPOFs)",
+             len(all_deps), len(shared), n_shared_vuln, n_reach_spof)
     return all_deps, shared
 
 

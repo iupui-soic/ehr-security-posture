@@ -24,6 +24,11 @@ log = get_logger("figures")
 
 SEV_COLOR = {"critical": "#7d0a0a", "high": "#e8590c", "medium": "#f59f00",
              "low": "#74b816", "none": "#dee2e6"}
+SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "none": 4}
+# Deterministic top-to-bottom ordering of the system column (maven-heavy systems
+# near the top, npm-heavy Medplum near the bottom) to minimise edge crossings.
+SYS_ORDER = ["sys:ehrbase", "sys:openmrs", "sys:openemr", "sys:medplum",
+             "sys:gnuhealth"]
 DPI = 150
 
 
@@ -160,35 +165,124 @@ def fig_dependency_vuln(t):
 
 
 # --- F6 (centerpiece) ------------------------------------------------------ #
+def shared_bipartite_fig(g, title, new_bases=None, figsize=(7.4, 6.6),
+                         label_size=7.0, reachable_only=False):
+    """Deterministic bipartite view of shared *vulnerable* dependencies:
+    Maven (and other non-npm) packages in a left column, systems in the centre,
+    npm packages on the right; edges + nodes coloured by max severity. Non-
+    vulnerable shared deps and systems with no shared-vulnerable edge are dropped
+    (this is what removes the unreadable force-directed "hairball"). ``new_bases``
+    (purl_base set) outlines nodes surfaced only at a wider scope (F6b).
+    With ``reachable_only`` the figure keeps only edges to systems that genuinely
+    reach the dependency (node attr ``reachable_systems``) and only nodes that are
+    reachable in >=2 systems, i.e. true reachable cross-system SPOFs.
+    Returns a matplotlib Figure, or None when there is nothing to draw.
+    """
+    from matplotlib.lines import Line2D
+    new_bases = new_bases or set()
+    all_sys = [n for n, d in g.nodes(data=True) if d.get("kind") == "system"]
+    vuln = [n for n, d in g.nodes(data=True)
+            if d.get("kind") == "dependency" and d.get("vulnerable")]
+    if reachable_only:
+        vuln = [n for n in vuln
+                if len(g.nodes[n].get("reachable_systems") or []) >= 2]
+    if not vuln:
+        return None
+    sub = g.subgraph(all_sys + vuln).copy()
+    if reachable_only:  # drop edges to systems that do not genuinely reach the dep
+        for d in vuln:
+            reach = set(g.nodes[d].get("reachable_systems") or [])
+            for s in [nb for nb in sub.neighbors(d)
+                      if sub.nodes[nb].get("kind") == "system"]:
+                if s.replace("sys:", "", 1) not in reach:
+                    sub.remove_edge(s, d)
+    sys_nodes = [n for n in all_sys if sub.degree(n) > 0]
+    sys_nodes.sort(key=lambda n: (SYS_ORDER.index(n) if n in SYS_ORDER else 99, n))
+
+    def _is_npm(n):
+        return (sub.nodes[n].get("ecosystem") or "") == "npm"
+
+    def _skey(n):
+        d = sub.nodes[n]
+        return (SEV_RANK.get(d.get("max_severity"), 5),
+                -d.get("n_systems", 0), d.get("label", n))
+
+    left = sorted((n for n in vuln if not _is_npm(n)), key=_skey)
+    right = sorted((n for n in vuln if _is_npm(n)), key=_skey)
+
+    def _col(nodes, x):
+        m = max(len(nodes), 1)
+        return {n: (x, 1.0 - (i + 0.5) / m) for i, n in enumerate(nodes)}
+
+    pos = {**_col(left, 0.0), **_col(sys_nodes, 1.0), **_col(right, 2.0)}
+
+    fig, ax = plt.subplots(figsize=figsize)
+    edgelist, ecolors = [], []
+    for u, v in sub.edges():
+        dep = u if sub.nodes[u].get("kind") == "dependency" else v
+        other = v if dep == u else u
+        if dep not in pos or other not in pos:
+            continue
+        edgelist.append((u, v))
+        ecolors.append(SEV_COLOR.get(sub.nodes[dep].get("max_severity"), "#ced4da"))
+    nx.draw_networkx_edges(sub, pos, edgelist=edgelist, edge_color=ecolors,
+                           alpha=0.55, width=1.0, ax=ax)
+    nx.draw_networkx_nodes(sub, pos, nodelist=sys_nodes, node_shape="s",
+                           node_color="#1c7ed6", node_size=1500, ax=ax)
+    deps = left + right
+    dcolors = [SEV_COLOR.get(sub.nodes[n].get("max_severity"), "#ced4da") for n in deps]
+    dsizes = [170 + 90 * (max(sub.degree(n), 1) - 1) for n in deps]
+    is_new = [n.replace("dep:", "", 1) in new_bases for n in deps]
+    edgecols = ["#1c7ed6" if nw else "black" for nw in is_new]
+    lws = [2.2 if nw else 0.6 for nw in is_new]
+    nx.draw_networkx_nodes(sub, pos, nodelist=deps, node_color=dcolors,
+                           node_size=dsizes, edgecolors=edgecols, linewidths=lws, ax=ax)
+    nx.draw_networkx_labels(sub, pos, labels={n: sub.nodes[n].get("label", n)
+                            for n in sys_nodes}, font_size=6.5,
+                            font_color="black", ax=ax)
+    for n in left:
+        x, y = pos[n]
+        ax.text(x - 0.11, y, sub.nodes[n].get("label", n), ha="right", va="center",
+                fontsize=label_size)
+    for n in right:
+        x, y = pos[n]
+        ax.text(x + 0.11, y, sub.nodes[n].get("label", n), ha="left", va="center",
+                fontsize=label_size)
+    if left:
+        ax.text(0.0, 1.05, "Maven", ha="center", va="bottom", fontsize=9, fontweight="bold")
+    if right:
+        ax.text(2.0, 1.05, "npm", ha="center", va="bottom", fontsize=9, fontweight="bold")
+    handles = [Line2D([0], [0], marker="o", color="w", markersize=8,
+               markerfacecolor=SEV_COLOR[s], label=s)
+               for s in ("critical", "high", "medium") if any(
+                   sub.nodes[n].get("max_severity") == s for n in deps)]
+    if new_bases:
+        handles.append(Line2D([0], [0], marker="o", color="w", markersize=8,
+                       markerfacecolor="#e9ecef", markeredgecolor="#1c7ed6",
+                       markeredgewidth=2, label="new at wide scope"))
+    if handles:
+        ax.legend(handles=handles, loc="lower center", ncol=len(handles),
+                  fontsize=7, frameon=False, bbox_to_anchor=(0.5, -0.05))
+    ax.set_title(title, fontsize=10)
+    ax.set_xlim(-1.0, 3.0)
+    ax.set_ylim(-0.10, 1.13)
+    ax.axis("off")
+    return fig
+
+
 def fig_shared_graph(_t):
     data = provenance.read_interim_json("dependency_graph.json") \
         if (config.INTERIM_DIR / "dependency_graph.json").exists() else None
     if not data or not data.get("nodes"):
         return _placeholder("F6_shared_dependency_graph", "no shared deps (run acquire)")
     g = nx.node_link_graph(data, edges="links")
-    dep_nodes = [n for n, d in g.nodes(data=True) if d.get("kind") == "dependency"]
-    if not dep_nodes:
+    fig = shared_bipartite_fig(
+        g, "F6. Reachable cross-system shared-vulnerable dependencies (core scope):\n"
+           "single points of failure reachable in ≥2 systems",
+        reachable_only=True)
+    if fig is None:
         return _placeholder("F6_shared_dependency_graph",
-                            "no dependencies shared across >1 system")
-    sys_nodes = [n for n, d in g.nodes(data=True) if d.get("kind") == "system"]
-    pos = nx.spring_layout(g, seed=42, k=0.6, iterations=200)
-    fig, ax = plt.subplots(figsize=(11, 8))
-    nx.draw_networkx_nodes(g, pos, nodelist=sys_nodes, node_shape="s",
-                           node_color="#1c7ed6", node_size=1400, ax=ax)
-    vuln = [n for n in dep_nodes if g.nodes[n].get("vulnerable")]
-    safe = [n for n in dep_nodes if not g.nodes[n].get("vulnerable")]
-    nx.draw_networkx_nodes(g, pos, nodelist=safe, node_color="#ced4da",
-                           node_size=220, ax=ax)
-    nx.draw_networkx_nodes(g, pos, nodelist=vuln, node_color="#e03131",
-                           node_size=380, ax=ax, edgecolors="black")
-    nx.draw_networkx_edges(g, pos, alpha=0.25, ax=ax)
-    nx.draw_networkx_labels(g, pos, labels={n: g.nodes[n].get("label", n)
-                            for n in sys_nodes}, font_size=9, font_color="white", ax=ax)
-    nx.draw_networkx_labels(g, pos, labels={n: g.nodes[n].get("label", n)
-                            for n in vuln}, font_size=7, ax=ax)
-    ax.set_title("F6. Dependencies shared across EHRs (red = shared & vulnerable: "
-                 "cross-system single points of failure)")
-    ax.axis("off")
+                            "no reachable cross-system shared-vulnerable deps")
     _save(fig, "F6_shared_dependency_graph")
 
 

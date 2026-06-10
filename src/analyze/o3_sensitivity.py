@@ -35,6 +35,7 @@ from ..transform.dependency_graph import (
     MANIFEST_FILES, _component_locations, _direct_map_from_graph,
     _purl_base, _purl_type, analyze_shared,
 )
+from .figures import shared_bipartite_fig
 
 log = get_logger("o3_sensitivity")
 SEV_ORDER = ["critical", "high", "medium", "low"]
@@ -163,41 +164,22 @@ def _write_csv(path, header, rows):
 
 
 def _render_graph(graph_data: dict, path, new_bases: set[str]):
-    """F6b: shared-dependency graph at O3-as-shipped scope (mirrors F6).
+    """F6b: shared *vulnerable*-dependency bipartite view at O3-as-shipped scope.
 
-    Nodes only reachable because of the wider OpenMRS scope are outlined in blue.
+    Reuses the same deterministic columnar renderer as F6 (Maven | systems | npm),
+    so the two figures are directly comparable. Nodes surfaced only because of the
+    wider OpenMRS scope are outlined in blue. Taller canvas + smaller labels to fit
+    the ~50 shared-vulnerable nodes that the wide scope reveals.
     """
-    full = nx.node_link_graph(graph_data, edges="links")
-    # Prune to shared *vulnerable* nodes (the single-points-of-failure the figure is
-    # about) + the systems. Keeps the layout small and avoids the scipy-backed
-    # sparse solver spring_layout needs above ~500 nodes.
-    sys_nodes = [n for n, d in full.nodes(data=True) if d.get("kind") == "system"]
-    vuln = [n for n, d in full.nodes(data=True)
-            if d.get("kind") == "dependency" and d.get("vulnerable")]
-    if not vuln:
+    g = nx.node_link_graph(graph_data, edges="links")
+    fig = shared_bipartite_fig(
+        g, "F6b. Shared vulnerable dependencies with OpenMRS at\n"
+           "O3 reference-application (as-shipped) scope",
+        new_bases=new_bases, figsize=(8.0, 11.0), label_size=6.0)
+    if fig is None:
         return
-    g = full.subgraph(sys_nodes + vuln).copy()
-    pos = nx.spring_layout(g, seed=42, k=0.55, iterations=200)
-    fig, ax = plt.subplots(figsize=(13, 9))
-    nx.draw_networkx_nodes(g, pos, nodelist=sys_nodes, node_shape="s",
-                           node_color="#1c7ed6", node_size=1500, ax=ax)
-    new = [n for n in vuln if n.replace("dep:", "", 1) in new_bases]
-    old = [n for n in vuln if n.replace("dep:", "", 1) not in new_bases]
-    nx.draw_networkx_nodes(g, pos, nodelist=old, node_color="#e03131",
-                           node_size=320, ax=ax, edgecolors="black")
-    nx.draw_networkx_nodes(g, pos, nodelist=new, node_color="#e03131",
-                           node_size=360, ax=ax, edgecolors="#1c7ed6", linewidths=2.2)
-    nx.draw_networkx_edges(g, pos, alpha=0.18, ax=ax)
-    nx.draw_networkx_labels(g, pos, labels={n: g.nodes[n].get("label", n)
-                            for n in sys_nodes}, font_size=9, font_color="white", ax=ax)
-    nx.draw_networkx_labels(g, pos, labels={n: g.nodes[n].get("label", n)
-                            for n in vuln}, font_size=6, ax=ax)
-    ax.set_title("F6b. Shared dependencies with OpenMRS at O3-as-shipped scope "
-                 "(red = shared & vulnerable; blue outline = surfaced only by the "
-                 "wider scope)")
-    ax.axis("off")
-    fig.tight_layout()
-    fig.savefig(config.PAPER_FIGURES_DIR / "F6b_shared_dependency_graph_o3wide.png", dpi=150)
+    fig.savefig(config.PAPER_FIGURES_DIR / "F6b_shared_dependency_graph_o3wide.png",
+                dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
