@@ -23,7 +23,7 @@ import re
 import subprocess
 from pathlib import Path
 
-ROOT = Path("/home/jupyter-saptpurk/bhi26-openmrs-sec1")
+ROOT = Path(__file__).resolve().parents[1]
 CLONES = ROOT / "clones"
 F6 = ROOT / "paper/figures/F6_shared_vulnerable.csv"
 
