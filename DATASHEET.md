@@ -1,9 +1,8 @@
-# Datasheet — Open-Source EHR Security Signals (Paper #1)
+# Datasheet — Open-Source EHR Security Signals
 
 Datasheet-for-datasets (Gebru et al., 2021) for the dataset produced by this
 pipeline. Every figure in `config/snapshot.yaml` is reported "as of"
-`snapshot_date` (currently **2026-06-09**). This datasheet is the seed for the
-curated/living dataset of Paper #2.
+`snapshot_date` (currently **2026-06-09**).
 
 ## Motivation
 - **Purpose.** Enable a reproducible, multi-dimensional comparison of the security
@@ -12,7 +11,7 @@ curated/living dataset of Paper #2.
 - **Why these signals.** Each maps to a research question: development security
   practices (RQ1), the disclosed-vulnerability landscape (RQ2), and supply-chain /
   shared-dependency risk (RQ3, the centerpiece). Project descriptors are context,
-  not an RQ. No composite "security score" is computed (deferred to Paper #2).
+  not an RQ. No composite "security score" is computed.
 
 ## Composition
 Six normalized entities (frozen schema: `schema/dataset_schema.json`), written to
@@ -76,8 +75,8 @@ table `ehr_security_dataset.parquet`:
   documented scope rule + sensitivity analysis.
 
 ## Uses
-- Intended: the RQ1–RQ3 analyses and figures in Paper #1; the seed corpus for
-  Paper #2's patient-risk-weighted index.
+- Intended: the RQ1–RQ3 analyses and figures in this study; a reusable corpus for
+  re-measuring these systems over time.
 - Out of scope: any ranked "most insecure EHR" claim; any exploit development.
 
 ## Distribution & maintenance
