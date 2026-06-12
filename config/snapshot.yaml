@@ -26,6 +26,8 @@ endpoints:
   nvd_cve: "https://services.nvd.nist.gov/rest/json/cves/2.0"
   osv_querybatch: "https://api.osv.dev/v1/querybatch"
   deps_dev: "https://api.deps.dev/v3"
+  cisa_kev: "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+  epss: "https://api.first.org/data/v1/epss"
 
 # --- Credentials are read from the environment, never committed --------------
 required_env:

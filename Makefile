@@ -1,12 +1,12 @@
 # =============================================================================
-# Makefile — EHR security comparative study (Paper #1)
+# Makefile — EHR security comparative study
 # Reproduce end-to-end against a fixed snapshot:  make all
 #
 # Python runs in an isolated uv-managed venv (.venv, CPython 3.11).
 # scorecard + syft run via their official Docker images (scripts/*.sh) since no
 # Go toolchain is installed on the host.
 # =============================================================================
-.PHONY: help setup check-env acquire transform dataset analyze figures sensitivity rq4-agreement rq4-distro-agreement rq4-php-agreement test all clean tool-versions
+.PHONY: help setup check-env acquire transform dataset analyze exposure figures sensitivity rq4-agreement rq4-distro-agreement rq4-php-agreement test all clean tool-versions
 
 PY := .venv/bin/python
 SNAPSHOT := $(shell sed -n 's/^snapshot_date:[[:space:]]*"\([^"]*\)".*/\1/p' config/snapshot.yaml)
@@ -18,6 +18,7 @@ help:
 	@echo "  transform   classify CVEs, latency, build dependency graph -> data/interim/"
 	@echo "  dataset     join everything -> data/processed/ + schema validation"
 	@echo "  analyze     descriptive comparisons (grouped by system_type; no inferential stats)"
+	@echo "  exposure    KEV + EPSS exploitation layer on disclosed CVEs + shared SPOFs (in analyze)"
 	@echo "  figures     regenerate F1-F6, T1-T2 -> paper/figures/"
 	@echo "  sensitivity OpenMRS O3 as-shipped scope check (RQ3) -> T3, F6b (needs Docker)"
 	@echo "  rq4-agreement inter-tool SAST agreement (Java panel: Semgrep+FindSecBugs+CodeQL); needs Docker"
@@ -52,6 +53,7 @@ acquire: check-env
 	$(PY) -m src.acquire.ghsa
 	$(PY) -m src.acquire.sbom_generate
 	$(PY) -m src.acquire.deps_dev
+	$(PY) -m src.acquire.exploit_signals
 
 transform:
 	$(PY) -m src.transform.cve_classify
@@ -65,6 +67,7 @@ dataset: transform
 analyze: dataset
 	$(PY) -m src.analyze.descriptive
 	$(PY) -m src.analyze.comparisons
+	$(PY) -m src.analyze.exposure
 
 figures: analyze
 	$(PY) -m src.analyze.figures

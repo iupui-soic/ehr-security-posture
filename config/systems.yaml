@@ -14,7 +14,7 @@
 # =============================================================================
 
 meta:
-  study: "Comparative security study of open-source EHR systems (Paper #1)"
+  study: "Comparative security study of open-source EHR systems"
   sample_size: 5
   framing: "comparative study (N=5), not a large-N benchmark"
   report_grouped_by: system_type   # app vs platform

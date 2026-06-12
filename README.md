@@ -1,9 +1,7 @@
-# EHR Security Comparative Study (Paper #1)
+# EHR Security Comparative Study
 
 A reproducible comparison of the **security posture and supply-chain risk** of five
-open-source EHR systems, using only public data and open tooling. Framed for IEEE BHI
-(health-informatics venue): the security engineering serves a patient-data / care-continuity
-argument.
+open-source EHR systems, using only public data and open tooling.
 
 > The config files (`config/systems.yaml`, `config/snapshot.yaml`) and
 > `schema/dataset_schema.json` are authoritative for the sample, snapshot, and
@@ -60,12 +58,6 @@ and figures/tables in `paper/figures/`. Raw API responses are archived, dated, u
 - **GNU Health is on Codeberg** — GitHub-only Scorecard checks are `not_assessable`
   (never imputed); use Syft for its SBOM.
 - Do not change the sample without updating `config/systems.yaml`.
-
-## Sets up Paper #2
-
-Over-collect raw signal, freeze the schema, archive dated raw data, and **defer any
-composite "security score"** — the patient-risk-weighted index + dataset release is
-Paper #2 (JBHI).
 
 ## Build phases
 
