@@ -173,9 +173,7 @@ def _render_graph(graph_data: dict, path, new_bases: set[str]):
     """
     g = nx.node_link_graph(graph_data, edges="links")
     fig = shared_bipartite_fig(
-        g, "F6b. Shared vulnerable dependencies with OpenMRS at\n"
-           "O3 reference-application (as-shipped) scope",
-        new_bases=new_bases, figsize=(8.0, 11.0), label_size=6.0)
+        g, "", new_bases=new_bases, figsize=(8.0, 11.0), label_size=6.0)
     if fig is None:
         return
     fig.savefig(config.PAPER_FIGURES_DIR / "F6b_shared_dependency_graph_o3wide.png",

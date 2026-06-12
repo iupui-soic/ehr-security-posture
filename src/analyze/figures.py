@@ -11,6 +11,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.ticker import MaxNLocator  # noqa: E402
 import networkx as nx  # noqa: E402
 import numpy as np  # noqa: E402
 
@@ -72,7 +73,6 @@ def fig_scorecard(t):
                 ax.text(j, i, f"{v:.0f}", ha="center", va="center", fontsize=8,
                         color="black")
     fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02, label="Scorecard 0-10")
-    ax.set_title("F1. OpenSSF Scorecard by check (n/a = not assessable on Codeberg)")
     _save(fig, "F1_scorecard_heatmap")
 
 
@@ -90,7 +90,6 @@ def fig_cve_severity(t):
                    color=SEV_COLOR[sev], label=sev)
             bottom += c[sev].to_numpy()
     ax.set_ylabel("disclosed CVEs")
-    ax.set_title("F2. Disclosed-CVE landscape by severity (note the asymmetry)")
     ax.legend(title="severity", fontsize=8)
     plt.xticks(rotation=20, ha="right")
     _save(fig, "F2_cve_severity")
@@ -104,7 +103,7 @@ def fig_cve_by_year(t):
     for col in [c for c in loaders.SYSTEM_ORDER if c in y.columns]:
         ax.plot(y.index.astype(int), y[col], marker="o", label=col)
     ax.set_xlabel("year"); ax.set_ylabel("disclosed CVEs")
-    ax.set_title("F2b. Disclosed CVEs per year")
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.legend(fontsize=8)
     _save(fig, "F2b_cve_by_year")
 
@@ -122,7 +121,6 @@ def fig_owasp(t):
         ax.barh(o.index, o[col], left=bottom, color=cmap(k % 10), label=col)
         bottom += o[col].to_numpy()
     ax.set_xlabel("CVE count")
-    ax.set_title("F3. Vulnerability-class mix (OWASP Top-10:2021)")
     ax.legend(fontsize=8, ncol=2)
     _save(fig, "F3_owasp_distribution")
 
@@ -139,7 +137,6 @@ def fig_latency(t):
             ax.scatter([sid] * len(d), d, alpha=0.6)
     ax.axhline(0, color="#adb5bd", lw=0.8)
     ax.set_ylabel("days (fix release - disclosure)")
-    ax.set_title("F4. Remediation latency where determinable (opportunistic)")
     plt.xticks(rotation=20, ha="right")
     _save(fig, "F4_remediation_latency")
 
@@ -158,7 +155,6 @@ def fig_dependency_vuln(t):
         ax.bar(d["label"], d[sev], bottom=bottom, color=SEV_COLOR[sev], label=sev)
         bottom += d[sev].to_numpy()
     ax.set_ylabel("vulnerable dependencies")
-    ax.set_title("F5. Dependency vulnerabilities: direct vs transitive, by severity")
     ax.legend(title="severity", fontsize=8)
     plt.xticks(rotation=0, fontsize=8)
     _save(fig, "F5_dependency_vuln")
@@ -263,7 +259,8 @@ def shared_bipartite_fig(g, title, new_bases=None, figsize=(7.4, 6.6),
     if handles:
         ax.legend(handles=handles, loc="lower center", ncol=len(handles),
                   fontsize=7, frameon=False, bbox_to_anchor=(0.5, -0.05))
-    ax.set_title(title, fontsize=10)
+    if title:
+        ax.set_title(title, fontsize=10)
     ax.set_xlim(-1.0, 3.0)
     ax.set_ylim(-0.10, 1.13)
     ax.axis("off")
@@ -276,10 +273,7 @@ def fig_shared_graph(_t):
     if not data or not data.get("nodes"):
         return _placeholder("F6_shared_dependency_graph", "no shared deps (run acquire)")
     g = nx.node_link_graph(data, edges="links")
-    fig = shared_bipartite_fig(
-        g, "F6. Reachable cross-system shared-vulnerable dependencies (core scope):\n"
-           "single points of failure reachable in ≥2 systems",
-        reachable_only=True)
+    fig = shared_bipartite_fig(g, "", reachable_only=True)
     if fig is None:
         return _placeholder("F6_shared_dependency_graph",
                             "no reachable cross-system shared-vulnerable deps")
